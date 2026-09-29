@@ -31,6 +31,29 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 FastAPI service = intake API + SVI engine + counsellor console (static SPA).
 SQLite persists cases/windows/audit (schema mirrors the intended Supabase tables 1:1).
 
+## REAL audio verification (recorded calls, not scripting)
+
+`POST /api/analyze-audio` accepts a real PCM WAV and runs the actual DSP
+pipeline: VAD (10th-pct noise-floor gating), silence-run segmentation,
+autocorrelation F0 with jitter, 4–12 Hz tremor band on the voiced RMS
+contour, speech-rate from ASR/onsets — fused into SVI per 8-second window.
+
+Verified in-repo:
+
+```
+distressed.wav (25.7s synthetic call: tremor bursts + 2.5-3s silences)
+  win0 SVI 57.6 HIGH | win1 SVI 50.1 HIGH | win2 SVI 93.0 CRITICAL (rail)
+calm.wav (28.3s steady voice)
+  wins 26.9-40.9 MODERATE, no subflags, no rail
+Gate-1 (prosody-only, no transcript): distressed → HIGH on voice alone
+```
+
+Server-side ASR (`faster-whisper`) and `librosa` are optional installs for
+local/on-prem (`pip install -r requirements-full.txt`) — too heavy for
+serverless, which is exactly why the degradation ladder (server ASR →
+client transcript → prosody-only) exists. Production telephony path:
+`docs/PRODUCTION.md`.
+
 ## Prototype -> Production map
 
 | Prototype (here) | Production (NHAA deployment) |

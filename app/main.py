@@ -3,11 +3,12 @@
 import json
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from . import audio_pipeline as ap
 from . import db, svi
 from .scenarios import SCENARIOS, TIER_ACTIONS
 
@@ -123,6 +124,79 @@ def audit_log():
 @app.get("/api/fairness")
 def fairness():
     return svi.fairness_check()
+
+
+@app.post("/api/analyze-audio")
+async def analyze_audio(file: UploadFile = File(...),
+                        transcript: str = Form(""),
+                        language: str = Form("Hinglish"),
+                        repeat_calls: int = Form(0),
+                        abandoned: bool = Form(False)):
+    """REAL call recording -> REAL prosody extraction -> SVI per 8s window.
+    ASR ladder: server-side faster-whisper (local/on-prem) -> client-side
+    transcript (browser Speech API) -> Gate-1 prosody-only + abstention."""
+    raw = await file.read()
+    try:
+        x, sr = ap.load_wav(raw)
+    except ap.AudioError as e:
+        return JSONResponse(
+            {"error": str(e),
+             "hint": "Upload a PCM WAV (16-bit mono preferred). "
+                     "MP3/other codecs are decoded client-side via the "
+                     "Record-Live feature, or convert to WAV first."},
+            status_code=400)
+
+    duration = len(x) / sr
+    chunks = ap.window_signal(x, sr, 8.0)
+    cid, tok = db.create_case(language, repeat_calls, abandoned)
+    db.audit(cid, "REAL_AUDIO_INGESTED",
+             "wav %.1fs | %d analysis windows" % (duration, len(chunks)))
+
+    texts = [""] * len(chunks)
+    asr_mode = "none"
+    if ap.server_asr_available():
+        asr_mode = "server:faster-whisper(tiny)"
+        for i, t in ap.transcribe_windows(chunks, sr) or []:
+            texts[i] = t
+    elif transcript.strip():
+        asr_mode = "client:browser-speech-api"
+        texts[-1] = transcript.strip()
+
+    windows_out = []
+    for i, chunk in enumerate(chunks):
+        wsec = len(chunk) / sr
+        nwords = len(texts[i].split())
+        feats = ap.prosody_from_signal(chunk, sr, wsec, words=nwords)
+        pros = svi.analyze_prosody(feats)
+        tres = svi.analyze_text(texts[i])
+        fused = svi.fuse(tres, pros,
+                         {"repeat_calls": repeat_calls,
+                          "abandoned": abandoned})
+        first_crit = db.record_window(cid, i, texts[i], fused)
+        fused["first_critical_at"] = first_crit
+        fused["sla_seconds"] = 90
+        windows_out.append({
+            "idx": i, "duration_s": round(wsec, 1), "text": texts[i],
+            "prosody_features": feats, "svi": fused["svi"],
+            "tier": fused["tier"], "tier_color": fused["tier_color"],
+            "subflags": fused["subflags"], "why": fused["why"],
+            "poa": fused["poa"], "rail": fused["rail"],
+            "abstain": fused["abstain"], "confidence": fused["confidence"],
+            "text_score": fused["text_score"],
+            "prosody_score": fused["prosody_score"],
+            "first_critical_at": first_crit})
+
+    final = windows_out[-1] if windows_out else {}
+    return {
+        "case_id": cid, "token": tok,
+        "asr_mode": asr_mode,
+        "gate": "GATE1+GATE2 (audio prosody + text)" if asr_mode != "none"
+                else "GATE1 (prosody-only, language-agnostic)",
+        "duration_s": round(duration, 1),
+        "windows": windows_out,
+        "final": final,
+        "disclaimer": "Triage flag for human experts - NOT a clinical "
+                      "diagnosis. Human review required before any action."}
 
 
 @app.get("/api/report/{cid}", response_class=PlainTextResponse)

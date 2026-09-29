@@ -1,0 +1,4 @@
+# full local/on-prem install: real server-side ASR + optional librosa
+-r requirements.txt
+faster-whisper
+librosa

@@ -209,8 +209,14 @@ def fuse(text_res, pros_res, meta=None):
     abandoned = bool(meta.get("abandoned", False))
 
     meta_score = min(20, repeat * 5) + (8 if abandoned else 0)
-    svi = 0.55 * text_res["text_score"] + 0.35 * pros_res["prosody_score"] \
-          + 0.10 * min(100, meta_score * 5)
+    pros_led = (text_res["text_score"] == 0 and text_res["evidence"] == 0)
+    if pros_led:
+        # GATE-1 standalone: no ASR / no text evidence -> prosody leads.
+        # Language-agnostic distress screen that works on any dialect.
+        svi = 0.85 * pros_res["prosody_score"] + 0.15 * min(100, meta_score * 5)
+    else:
+        svi = 0.55 * text_res["text_score"] + 0.35 * pros_res["prosody_score"] \
+              + 0.10 * min(100, meta_score * 5)
 
     why = list(text_res["why"]) + list(pros_res["why"])
     if repeat:
@@ -259,6 +265,7 @@ def fuse(text_res, pros_res, meta=None):
         "text_score": text_res["text_score"],
         "prosody_score": pros_res["prosody_score"],
         "meta_score": min(100, meta_score * 5),
+        "pros_led": pros_led,
         "coping_note": text_res["details"].get("coping"),
     }
 

@@ -99,8 +99,21 @@ a{color:var(--gold)}
       <div class="small" style="margin-top:8px">Anonymous token shown to no one else · redact-before-store · no voiceprints</div>
     </div>
 
+    <div class="card" id="realCard" style="display:none;border-color:#c9a22755">
+      <h2>🔴 REAL audio — analyze an actual call recording (not a demo)</h2>
+      <label>Upload a PCM WAV of a real call (recorded phone audio)</label>
+      <input type="file" id="realFile" accept=".wav,audio/wav,audio/x-wav" style="width:100%;font-size:13px">
+      <label>Optional transcript (used live if server ASR is not installed)</label>
+      <input type="text" id="manualTranscript" placeholder="e.g. gaon walon ne bahishkar kar diya hai...">
+      <button class="btn" onclick="uploadReal($('realFile').files[0])">Analyze real recording → SVI</button>
+      <div class="small" style="margin-top:8px">Pipeline: WAV → numpy DSP (RMS/VAD, autocorrelation F0, jitter/shimmer, 4–12 Hz tremor band, silence runs) → 8s windows → real SVI per window. ASR ladder: faster-whisper (local) → your transcript → Gate-1 prosody-only.</div>
+      <hr style="border-color:#ffffff22;margin:12px 0">
+      <button class="btn alt" id="micBtn" onclick="micToggle()" style="width:100%">● Record live voice (your mic) & analyze</button>
+      <div class="small" style="margin-top:6px">Chrome/Edge transcribes live (hi-IN) via the browser Speech API; audio is WAV-encoded in-page and posted to the real DSP pipeline.</div>
+    </div>
+
     <div class="card" id="scenarioCard" style="display:none">
-      <h2>Simulate a live 14566 call (streamed windows ≈ every 3s)</h2>
+      <h2>Simulate a live 14566 call (scripted victims, streamed windows)</h2>
       <div id="scenarioList"></div>
       <div class="small" style="margin-top:8px">Prosody values simulate the librosa/ASR pipeline output for each audio window.</div>
     </div>
@@ -187,6 +200,7 @@ async function startSession(){
   session=await j('/api/session',{language:$('lang').value});
   $('tokenBox').innerHTML=`<span class="token">Anonymous token: ${session.token}</span>`;
   $('scenarioCard').style.display='block';
+  $('realCard').style.display='block';
   $('transcript').innerHTML='<div class="small">Consent captured ✓ · Session anonymised ✓ · Choose a caller scenario to stream the demo call.</div>';
   sviHistory=[];drawSpark();
 }
@@ -238,6 +252,83 @@ function drawSpark(){
   x.strokeStyle=g;x.lineWidth=2.5;x.beginPath();
   pts.forEach((p,i)=>i?x.lineTo(p.x,p.y):x.moveTo(p.x,p.y));x.stroke();
   pts.forEach(p=>{x.fillStyle='#fff';x.beginPath();x.arc(p.x,p.y,2.5,0,7);x.fill()});
+}
+
+/* ------------- REAL AUDIO: upload + live mic ------------- */
+async function uploadReal(file){
+  if(!file){alert('Pick a WAV file first (or use Record live voice).');return;}
+  if(!$('consent').checked){alert('Consent first.');return;}
+  const fd=new FormData();
+  fd.append('file',file,file.name||'call.wav');
+  fd.append('transcript',micText||$('manualTranscript').value||'');
+  fd.append('language',$('lang').value);
+  $('transcript').innerHTML='<div class="small">Extracting REAL prosody from audio (DSP running)…</div>';
+  const r=await fetch('/api/analyze-audio',{method:'POST',body:fd});
+  const res=await r.json();
+  if(res.error){$('transcript').innerHTML=`<div class="msg caller"><b>ERROR:</b> ${res.error}<br><span class="small">${res.hint||''}</span></div>`;return;}
+  playBack(res);
+}
+
+async function playBack(res){
+  $('transcript').innerHTML='';sviHistory=[];
+  $('railBox').classList.remove('show');$('abstainBox').classList.remove('show');
+  $('tokenBox').innerHTML=`<span class="token">Anonymous token: ${res.token}</span><br><span class="chip">${res.gate}</span> <span class="chip">ASR: ${res.asr_mode}</span> <span class="chip">${res.duration_s}s of real audio</span>`;
+  for(const w of res.windows){
+    addMsg(w.text?w.text:`<i>[${w.duration_s}s window · prosody-only analysis · silence ${(w.prosody_features.silence_ratio*100).toFixed(0)}% · tremor ${w.prosody_features.tremor.toFixed(2)} · pitch-var ${w.prosody_features.pitch_var.toFixed(2)}]</i>`);
+    renderSVI(w);
+    await new Promise(r=>setTimeout(r,950));
+  }
+  addMsg(`<i>Real-audio analysis complete — ${res.windows.length} windows scored. Case is live in the Console tab (with audit trail).</i>`);
+  micText='';
+}
+
+let mrec,chunks=[],micText='',srRec=null;
+function startSR(){
+  const R=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!R)return; srRec=new R(); srRec.lang='hi-IN'; srRec.interimResults=false; srRec.continuous=true;
+  srRec.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)micText+=e.results[i][0].transcript+' ';};
+  try{srRec.start();}catch(_){srRec=null;}
+}
+function stopSR(){if(srRec){try{srRec.stop();}catch(_){} srRec=null;}}
+
+async function micToggle(){
+  if(mrec&&mrec.state==='recording'){mrec.stop();return;}
+  if(!$('consent').checked){alert('Consent first.');return;}
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    chunks=[];micText='';startSR();
+    mrec=new MediaRecorder(stream);
+    mrec.ondataavailable=e=>chunks.push(e.data);
+    mrec.onstop=async()=>{
+      stopSR();stream.getTracks().forEach(t=>t.stop());
+      $('micBtn').textContent='● Record live voice (your mic) & analyze';
+      const wav=await blobToWav(new Blob(chunks));
+      uploadReal(wav);
+    };
+    mrec.start();
+    $('micBtn').textContent='■ Stop & analyze (recording… speak now)';
+  }catch(e){alert('Mic access failed: '+e.message);}
+}
+
+function floatTo16kWav(samples,inRate){
+  const ratio=inRate/16000,n=Math.max(1,Math.floor(samples.length/ratio));
+  const out=new Int16Array(n);
+  for(let i=0;i<n;i++){const s=samples[Math.min(samples.length-1,Math.floor(i*ratio))];
+    out[i]=Math.max(-32768,Math.min(32767,Math.round(s*32767)));}
+  const buf=new ArrayBuffer(44+n*2),v=new DataView(buf);
+  const W=(o,str)=>{for(let i=0;i<str.length;i++)v.setUint8(o+i,str.charCodeAt(i));};
+  W(0,'RIFF');v.setUint32(4,36+n*2,true);W(8,'WAVE');W(12,'fmt ');
+  v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+  v.setUint32(24,16000,true);v.setUint32(28,32000,true);v.setUint16(32,2,true);
+  v.setUint16(34,16,true);W(36,'data');v.setUint32(40,n*2,true);
+  for(let i=0;i<n;i++)v.setInt16(44+i*2,out[i],true);
+  return new Blob([buf],{type:'audio/wav'});
+}
+async function blobToWav(blob){
+  const ab=await blob.arrayBuffer();
+  const actx=new (window.AudioContext||window.webkitAudioContext)();
+  const buf=await actx.decodeAudioData(ab);
+  return floatTo16kWav(buf.getChannelData(0),buf.sampleRate);
 }
 
 /* ---------------- Console ---------------- */
