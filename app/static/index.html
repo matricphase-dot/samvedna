@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAMVEDNA - Real-Time Trauma Triage | SIH26093</title>
+<style>
+:root{--navy:#1f3864;--red:#b00020;--gold:#c9a227;--bg:#0f1b33;--panel:#16244a;
+--ink:#e8eefc;--dim:#9fb0d6;--green:#2e7d32;--amber:#f9a825;--orange:#ef6c00}
+*{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,Arial,sans-serif}
+body{background:var(--bg);color:var(--ink);min-height:100vh}
+header{background:var(--navy);padding:14px 22px;display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid var(--gold)}
+h1{font-size:22px;letter-spacing:1px}
+h1 span{color:var(--gold)}
+.disc{font-size:11px;background:#00000033;border:1px solid #ffffff2a;border-radius:8px;padding:6px 10px;color:#ffd9df}
+.tabs{display:flex;gap:8px;padding:12px 22px 0}
+.tab{background:#ffffff14;border:1px solid #ffffff22;color:var(--ink);padding:9px 18px;border-radius:10px 10px 0 0;cursor:pointer;font-weight:600;font-size:14px}
+.tab.active{background:var(--panel);border-bottom-color:var(--panel);color:#fff}
+main{padding:18px 22px;display:none}
+main.active{display:block}
+.cols{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}
+@media(max-width:900px){.cols{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid #ffffff1e;border-radius:14px;padding:16px;margin-bottom:14px}
+.card h2{font-size:15px;color:var(--gold);margin-bottom:10px;letter-spacing:.5px}
+label{font-size:13px;color:var(--dim);display:block;margin:8px 0 4px}
+select,input[type=text]{width:100%;background:#0d1730;color:var(--ink);border:1px solid #ffffff2b;border-radius:8px;padding:9px;font-size:14px}
+.btn{background:var(--red);color:#fff;border:none;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.alt{background:#ffffff1c;border:1px solid #ffffff33}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.consent{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--dim)}
+.token{font-family:Consolas,monospace;background:#00000040;border:1px dashed var(--gold);color:var(--gold);padding:6px 10px;border-radius:8px;font-size:13px;display:inline-block;margin-top:8px}
+.chip{display:inline-block;background:#ffffff17;border:1px solid #ffffff2d;border-radius:999px;padding:4px 11px;font-size:12px;margin:3px 4px 0 0;color:#dbe6ff}
+.chip.flag{background:#3a1620;border-color:#8c2f45;color:#ffc9d4}
+.chip.why{background:#122e18;border-color:#2e7d32;color:#c9f3cd}
+.chip.poa{background:#2c2306;border-color:var(--gold);color:#ffe9a8}
+.scn{display:block;width:100%;text-align:left;background:#ffffff10;border:1px solid #ffffff24;color:var(--ink);border-radius:10px;padding:11px 12px;margin-top:9px;cursor:pointer;font-size:13.5px}
+.scn:hover{background:#ffffff1d}
+.scn small{display:block;color:var(--dim);margin-top:3px}
+.transcript{min-height:120px;max-height:300px;overflow:auto;background:#0a1226;border-radius:10px;padding:12px;border:1px solid #ffffff17}
+.msg{background:#1c2f5e;border-radius:10px;padding:9px 12px;margin:7px 0;font-size:14px;line-height:1.45}
+.msg.caller{border-left:4px solid var(--gold)}
+.gauge{display:flex;align-items:center;gap:16px}
+.svinum{font-size:56px;font-weight:800;line-height:1}
+.tier{font-size:15px;font-weight:800;padding:5px 12px;border-radius:999px;color:#fff}
+canvas.spark{width:100%;height:64px;background:#0a1226;border-radius:8px;border:1px solid #ffffff17}
+.rail{display:none;background:var(--red);color:#fff;font-weight:700;border-radius:10px;padding:11px 14px;margin-top:10px;font-size:13.5px;border:2px solid #ff8095}
+.rail.show{display:block;animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 #b0002066}50%{box-shadow:0 0 0 9px #b0002000}}
+.abstain{display:none;background:#3d3a10;color:#ffe9a8;border:1px solid var(--gold);border-radius:10px;padding:10px 14px;margin-top:10px;font-size:13px;font-weight:600}
+.abstain.show{display:block}
+.qrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.qcard{background:var(--panel);border:1px solid #ffffff1e;border-radius:14px;padding:14px;border-left:6px solid var(--green)}
+.qhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.qmeta{font-size:12px;color:var(--dim);margin:5px 0}
+.timer{font-family:Consolas,monospace;font-size:18px;font-weight:700;color:#ff96a8}
+.timer.green{color:#8fe3a0}
+.actbtn{display:inline-block;background:#ffffff16;border:1px solid #ffffff30;color:#fff;font-size:12px;border-radius:8px;padding:6px 9px;margin:4px 4px 0 0;cursor:pointer}
+.actbtn:hover{background:var(--gold);color:#222}
+.statusCLOSED,.statusACTIONED{opacity:.55}
+.audit{font-size:12px;color:var(--dim);line-height:1.6;max-height:150px;overflow:auto}
+.audit b{color:var(--gold)}
+.fbox{font-size:13px;color:var(--dim);margin-top:8px;line-height:1.55}
+.fpass{color:#8fe3a0;font-weight:800}.ffail{color:#ff96a8;font-weight:800}
+.small{font-size:12px;color:var(--dim)}
+.hidden{display:none}
+.detailgrid{display:grid;grid-template-columns:1fr;gap:8px;font-size:13px}
+a{color:var(--gold)}
+</style>
+</head>
+<body>
+<header>
+  <h1>SAMVEDNA <span>· संवेदना</span> — Real-Time Trauma Triage for NHAA 14566</h1>
+  <div class="disc">Triage &amp; flagging aid for human experts · NOT a clinical diagnosis · Consent-first · Anonymous</div>
+</header>
+<div class="tabs">
+  <div class="tab active" onclick="showTab('intake',this)">1 · Caller Intake (Live Demo)</div>
+  <div class="tab" onclick="showTab('console',this)">2 · Counsellor Console</div>
+  <div class="tab" onclick="showTab('fairness',this)">3 · Fairness Harness</div>
+</div>
+
+<!-- ============ TAB 1 : INTAKE ============ -->
+<main id="intake" class="active">
+<div class="cols">
+  <div>
+    <div class="card">
+      <h2>Anonymous, consent-first session</h2>
+      <label>Language of the call</label>
+      <select id="lang">
+        <option>Hinglish</option><option>Hindi (romanized)</option>
+        <option>English</option><option>Bengali</option><option>Tamil</option><option>Telugu</option>
+      </select>
+      <div class="consent" style="margin-top:10px">
+        <input type="checkbox" id="consent" style="margin-top:3px">
+        <span>I understand this call is triaged to route help, it is <b>not</b> a medical diagnosis, my identity stays anonymous, and I can hang up anytime.</span>
+      </div>
+      <button class="btn" id="startBtn" onclick="startSession()" disabled>…loading scenarios…</button>
+      <span id="tokenBox"></span>
+      <div class="small" style="margin-top:8px">Anonymous token shown to no one else · redact-before-store · no voiceprints</div>
+    </div>
+
+    <div class="card" id="scenarioCard" style="display:none">
+      <h2>Simulate a live 14566 call (streamed windows ≈ every 3s)</h2>
+      <div id="scenarioList"></div>
+      <div class="small" style="margin-top:8px">Prosody values simulate the librosa/ASR pipeline output for each audio window.</div>
+    </div>
+
+    <div class="card">
+      <h2>Live call transcript</h2>
+      <div class="transcript" id="transcript"><div class="small">No call in progress. Start a session and pick a scenario.</div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Live SVI (updates while the caller is still on the line)</h2>
+      <div class="gauge">
+        <div class="svinum" id="sviNum">–</div>
+        <div>
+          <div class="tier" id="tierBadge" style="background:#555">NO CALL</div>
+          <div class="small" style="margin-top:6px" id="confLine"></div>
+        </div>
+      </div>
+      <canvas class="spark" id="spark" width="520" height="72"></canvas>
+      <div id="railBox" class="rail">SAFETY RAIL FIRED — explicit suicidal ideation detected. ML bypassed, forced CRITICAL. Human takeover required NOW.</div>
+      <div id="abstainBox" class="abstain">INSUFFICIENT EVIDENCE → HUMAN. Not enough reliable signal to score. Routing to a counsellor instead of fabricating a number.</div>
+    </div>
+
+    <div class="card">
+      <h2>Sub-flags</h2><div id="subflags"><span class="small">—</span></div>
+      <h2 style="margin-top:14px">Why (glass-box explanation)</h2><div id="why"><span class="small">—</span></div>
+      <h2 style="margin-top:14px">PoA Act 1989 — suggested provisions</h2><div id="poa"><span class="small">—</span></div>
+    </div>
+  </div>
+</div>
+</main>
+
+<!-- ============ TAB 2 : CONSOLE ============ -->
+<main id="console">
+  <div class="card">
+    <h2>Live triage queue — Critical-first, not FIFO (auto-refresh)</h2>
+    <div class="qrow" id="queue"><span class="small">Loading…</span></div>
+  </div>
+  <div class="card">
+    <h2>Case detail & actions</h2>
+    <div id="caseDetail" class="detailgrid"><span class="small">Click a case card to inspect trajectory, explanation, and act.</span></div>
+  </div>
+  <div class="card">
+    <h2>Audit log (who saw what, when — accountability by default)</h2>
+    <div class="audit" id="auditStrip">Loading…</div>
+  </div>
+</main>
+
+<!-- ============ TAB 3 : FAIRNESS ============ -->
+<main id="fairness">
+  <div class="card">
+    <h2>Counterfactual fairness harness — fairness as a test, not a poster</h2>
+    <div class="small">We flip dialect/community markers on <i>identical</i> narratives. If SVI drifts beyond the bound (5.0 pts), the build fails. Competitors hardcode "96.4" — we execute the check.</div>
+    <button class="btn" onclick="runFairness()">Run fairness check</button>
+    <div class="fbox" id="fairOut"></div>
+  </div>
+</main>
+
+<script>
+let scenarios=[], session=null, sviHistory=[], timerInt=null;
+const $=id=>document.getElementById(id);
+const TIERC={LOW:'#2e7d32',MODERATE:'#f9a825',HIGH:'#ef6c00',CRITICAL:'#b00020'};
+
+function showTab(id,el){document.querySelectorAll('main').forEach(m=>m.classList.remove('active'));
+ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+ $(id).classList.add('active');el.classList.add('active');}
+
+async function j(url,opt){const r=await fetch(url,opt?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(opt)}:undefined);return r.json();}
+
+async function boot(){
+  scenarios=await j('/api/scenarios');
+  $('startBtn').disabled=false;$('startBtn').textContent='Begin anonymous session';
+  $('scenarioList').innerHTML=scenarios.map(s=>
+   `<button class="scn" onclick="runScenario('${s.id}')"><b>▶ ${s.label}</b>
+    <small>${s.language} · ${s.windows} windows${s.repeat_calls?` · REPEAT CALLER ×${s.repeat_calls}`:''}${s.abandoned?' · prior abandoned call':''}</small></button>`).join('');
+  poll(); setInterval(poll,2500);
+}
+boot();
+
+async function startSession(){
+  if(!$('consent').checked){alert('Consent is required before any analysis. That is the point.');return;}
+  session=await j('/api/session',{language:$('lang').value});
+  $('tokenBox').innerHTML=`<span class="token">Anonymous token: ${session.token}</span>`;
+  $('scenarioCard').style.display='block';
+  $('transcript').innerHTML='<div class="small">Consent captured ✓ · Session anonymised ✓ · Choose a caller scenario to stream the demo call.</div>';
+  sviHistory=[];drawSpark();
+}
+
+async function newSessionForScenario(meta){
+  session=await j('/api/session',{language:meta.language,repeat_calls:meta.repeat_calls,abandoned:meta.abandoned});
+  $('tokenBox').innerHTML=`<span class="token">Anonymous token: ${session.token}</span>${meta.repeat_calls?` <span class="chip flag">REPEAT CALLER ×${meta.repeat_calls+' prior'}</span>`:''}`;
+}
+
+async function runScenario(sid){
+  if(!$('consent').checked){alert('Consent first.');return;}
+  const meta=scenarios.find(s=>s.id===sid);
+  await newSessionForScenario(meta);
+  $('transcript').innerHTML='';sviHistory=[];$('railBox').classList.remove('show');
+  $('abstainBox').classList.remove('show');
+  const w0=await j(`/api/scenario/${sid}/window/0`);const total=w0.total;
+  for(let i=0;i<total;i++){
+    const w=await j(`/api/scenario/${sid}/window/${i}`);
+    addMsg(w.text);
+    const res=await j('/api/assess',{case_id:session.case_id,window_idx:i,text:w.text,prosody:w.prosody});
+    renderSVI(res);
+    await new Promise(r=>setTimeout(r,2800));
+  }
+  addMsg('<i>— call window stream complete —</i>');
+}
+
+function addMsg(t){const d=document.createElement('div');d.className='msg caller';d.innerHTML=`<b>CALLER:</b> ${t}`;$('transcript').appendChild(d);$('transcript').scrollTop=1e6;}
+
+function renderSVI(r){
+  $('sviNum').textContent=r.svi;$('sviNum').style.color=r.tier_color;
+  const b=$('tierBadge');b.textContent=r.tier;b.style.background=r.tier_color;
+  $('confLine').textContent=`confidence: ${r.confidence} · text ${r.text_score} · prosody ${r.prosody_score}`;
+  sviHistory.push(r.svi);drawSpark();
+  $('railBox').classList.toggle('show',!!r.rail);
+  $('abstainBox').classList.toggle('show',!!r.abstain);
+  $('subflags').innerHTML=r.subflags.length?r.subflags.map(f=>`<span class="chip flag">${f}</span>`).join(''):'<span class="small">—</span>';
+  $('why').innerHTML=r.why.length?r.why.map(f=>`<span class="chip why">${f}</span>`).join(''):'<span class="small">—</span>';
+  $('poa').innerHTML=r.poa.length?r.poa.map(f=>`<span class="chip poa">${f}</span>`).join(''):'<span class="small">—</span>';
+}
+
+function drawSpark(){
+  const c=$('spark'),x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);
+  x.strokeStyle='#ffffff22';[25,50,75].forEach(v=>{const y=c.height-v/100*c.height;
+   x.beginPath();x.moveTo(0,y);x.lineTo(c.width,y);x.stroke();
+   x.fillStyle='#9fb0d6';x.font='9px Arial';x.fillText(v,3,y-2)});
+  if(sviHistory.length<2)return;
+  const pts=sviHistory.map((v,i)=>({x:i/(Math.max(6,sviHistory.length)-1)* (c.width-8)+4,y:c.height-v/100*c.height}));
+  const g=x.createLinearGradient(0,0,c.width,0);g.addColorStop(0,'#2e7d32');g.addColorStop(.6,'#f9a825');g.addColorStop(1,'#b00020');
+  x.strokeStyle=g;x.lineWidth=2.5;x.beginPath();
+  pts.forEach((p,i)=>i?x.lineTo(p.x,p.y):x.moveTo(p.x,p.y));x.stroke();
+  pts.forEach(p=>{x.fillStyle='#fff';x.beginPath();x.arc(p.x,p.y,2.5,0,7);x.fill()});
+}
+
+/* ---------------- Console ---------------- */
+async function poll(){
+  const q=await j('/api/cases');
+  $('queue').innerHTML=q.length?'':'<span class="small">Queue is empty — run a caller scenario.</span>';
+  q.forEach(c=>{
+    let card=document.getElementById('q'+c.id);
+    if(!card){card=document.createElement('div');card.id='q'+c.id;card.className='qcard';$('queue').appendChild(card);}
+    card.style.borderLeftColor=TIERC[c.tier]||'#555';
+    card.innerHTML=`<div class="qhead"><b>${c.token}</b>
+      <span class="tier" style="background:${TIERC[c.tier]}">${c.tier} · ${c.svi}</span></div>
+      <div class="qmeta">${c.language} · ${c.windows} windows · repeat×${c.repeat_calls}${c.abandoned?' · abandoned prev.':''} · <b class="status${c.status}">${c.status}${c.escalated?' · ESCALATED TO SUPERVISOR':''}</b></div>
+      <div>${(c.subflags||[]).map(f=>`<span class="chip flag">${f}</span>`).join('')}</div>
+      <div id="t${c.id}"></div>
+      <div style="margin-top:6px"><a href="javascript:inspect(${c.id})">inspect & act →</a></div>`;
+    if(c.tier==='CRITICAL'&&c.first_critical_at&&!c.escalated&&c.status==='OPEN'){
+      startTimer(c.id,c.first_critical_at,90);
+    }
+  });
+  const a=await j('/api/audit');
+  $('auditStrip').innerHTML=a.map(e=>`<div><b>${new Date(e.created_at*1000).toLocaleTimeString()}</b> · ${e.token} · <b>${e.event}</b> · ${e.detail}</div>`).join('');
+}
+
+function startTimer(cid,since,sla){
+  if(timerInt&&window['_t'+cid])return;window['_t'+cid]=1;
+  const el=()=>document.getElementById('t'+cid);
+  const tick=async()=>{
+    const left=Math.max(0,Math.round(sla-(Date.now()/1000-since)));
+    if(el())el().innerHTML=left>0?`SLA escalation in <span class="timer">${left}s</span>`:`<span class="timer">SLA BREACHED — escalating…</span>`;
+    if(left<=0){await fetch('/api/escalate/'+cid,{method:'POST'});window['_t'+cid]=0;poll();return;}
+    setTimeout(tick,1000);};
+  tick();
+}
+
+async function inspect(cid){
+  const c=await j('/api/case/'+cid);
+  const traj=c.windows_list.map(w=>w.svi);
+  const rising=traj.length>1&&traj[traj.length-1]>traj[0];
+  $('caseDetail').innerHTML=`
+   <div><b>${c.token}</b> · <span class="tier" style="background:${TIERC[c.tier]}">${c.tier} · ${c.svi}</span>
+     ${rising?'<span class="chip flag">↑ trajectory rising — auto-escalation logic</span>':''}</div>
+   <div class="small">Trajectory: ${traj.map(v=>v.toFixed(0)).join(' → ')||'—'}</div>
+   <div>${(c.why||[]).map(w=>`<span class="chip why">${w}</span>`).join('')}</div>
+   <div>${(c.poa||[]).map(p=>`<span class="chip poa">${p}</span>`).join('')}</div>
+   <div style="margin-top:8px"><b>Recommended actions (tier ${c.tier}):</b><br>
+     ${c.actions.map(a=>`<span class="actbtn" onclick="doAction(${cid},'${a.replace(/'/g,"")}')">${a}</span>`).join('')}
+     <span class="actbtn" onclick="doAction(${cid},'CLOSE')">Close case</span></div>
+   <div><a href="/api/report/${cid}" target="_blank">⬇ Export triage report (attach to NHAA docket)</a></div>`;
+}
+
+async function doAction(cid,a){await j('/api/action',{case_id:cid,action:a});poll();inspect(cid);}
+
+async function runFairness(){
+  const r=await j('/api/fairness');
+  $('fairOut').innerHTML=`<table style="width:100%;font-size:13px;margin-top:10px" cellpadding="6">
+   <tr style="color:#c9a227"><td><b>#</b></td><td><b>Variant A (dialect)</b></td><td><b>Variant B (standard)</b></td><td><b>Drift</b></td></tr>`+
+   r.pairs.map((p,i)=>`<tr><td>${i+1}</td><td>${p.variant_a_svi} (${p.tier_a})</td><td>${p.variant_b_svi} (${p.tier_b})</td><td>${p.drift} pts</td></tr>`).join('')+
+   `</table><div style="margin-top:10px">Max drift: <b>${r.max_drift}</b> pts · bound ${r.bound} →
+    <span class="${r.result==='PASS'?'fpass':'ffail'}">${r.result}</span></div>`;
+}
+</script>
+</body>
+</html>

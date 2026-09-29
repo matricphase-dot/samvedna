@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+samvedna.db
+.vercel
+.env
